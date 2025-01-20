@@ -61,6 +61,10 @@ MAP_IH_TO_HVAC_MODE = {
     "fan": HVACMode.FAN_ONLY,
     "heat": HVACMode.HEAT,
     "off": HVACMode.OFF,
+    "heat+tank":  HVACMode.HEAT,
+    "tank": HVACMode.OFF,
+    "cool+tank": HVACMode.COOL,
+    "auto+tank": HVACMode.HEAT_COOL,
 }
 MAP_HVAC_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_HVAC_MODE.items()}
 
