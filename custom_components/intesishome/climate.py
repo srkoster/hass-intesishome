@@ -64,6 +64,14 @@ MAP_IH_TO_HVAC_MODE = {
 }
 MAP_HVAC_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_HVAC_MODE.items()}
 
+MAP_TANK_MODE = {
+    "auto+tank": "auto",
+    "cool+tank": "cool",
+    "heat+tank": "heat",
+    "tank": "off",
+}
+REVERSE_MAP_TANK_MODE = {v: k for k, v in MAP_TANK_MODE.items()}
+
 MAP_IH_TO_PRESET_MODE = {
     "eco": PRESET_ECO,
     "comfort": PRESET_COMFORT,
@@ -240,6 +248,8 @@ class IntesisAC(ClimateEntity):
             for mode in modes:
                 if mode in MAP_IH_TO_HVAC_MODE:
                     mode_list.append(MAP_IH_TO_HVAC_MODE[mode])
+                elif mode in MAP_TANK_MODE:
+                    _LOGGER.debug("Found a tank mode, safely ignoring it: %s", mode)
                 else:
                     _LOGGER.warning("Unexpected mode: %s", mode)
             self._attr_hvac_modes.extend(mode_list)
@@ -337,7 +347,18 @@ class IntesisAC(ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set operation mode."""
         _LOGGER.debug("Setting %s to %s mode", self._device_type, hvac_mode)
+
+        ih_mode = MAP_HVAC_MODE_TO_IH[hvac_mode]
+
+        # Tank active, then upgrade ih_mode to mode+tank
+        mode = self._controller.get_mode(self._device_id)
+        if mode in MAP_TANK_MODE:
+            ih_mode = REVERSE_MAP_TANK_MODE[ih_mode]
+
         if hvac_mode == HVACMode.OFF:
+            # If tank is active, put in tank only mode first before powering down
+            if mode in MAP_TANK_MODE:
+                await self._controller.set_mode(self._device_id, ih_mode)
             self._power = False
             await self._controller.set_power_off(self._device_id)
             # Write changes to HA, API can be slow to push changes
@@ -350,7 +371,7 @@ class IntesisAC(ClimateEntity):
             await self._controller.set_power_on(self._device_id)
 
         # Set the mode
-        await self._controller.set_mode(self._device_id, MAP_HVAC_MODE_TO_IH[hvac_mode])
+        await self._controller.set_mode(self._device_id, ih_mode)
 
         # Send the temperature again in case changing modes has changed it
         if self._target_temp:
@@ -403,6 +424,9 @@ class IntesisAC(ClimateEntity):
 
         # Operation mode
         mode = self._controller.get_mode(self._device_id)
+        # If tank is active, get mode without tank for hvac
+        if mode in MAP_TANK_MODE:
+            mode = MAP_TANK_MODE(mode)
         self._hvac_mode = MAP_IH_TO_HVAC_MODE.get(mode)
 
         # Preset mode
